@@ -80,12 +80,17 @@
       std::string arr[4] = {"0", "", "", "i"};
         std::string *currentTag = arr;
     }
+    Proccessor() {
+      std::string arr[4] = {"0", "", "", "i"};
+        std::string *currentTag = arr;
+    }
   };
 
   //Create Proccessor Objs
   //Initilizes first entry and filePath
-  Proccessor pArr[4] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
-
+  Proccessor* pArr = new Proccessor[4];
+  //  pArr[0] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
+      pArr[0] = Proccessor("p0.tr");
 
 //Adds Data if timestamp < currentTime
 void startImport() {
