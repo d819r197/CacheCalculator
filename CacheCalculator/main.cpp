@@ -1,8 +1,4 @@
-//Tomorrow
-//Import 100 Elements at a time to list.
-//Pop_front elements that are ready
-//If list size gt 100 wait
-
+//Packages
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -12,13 +8,19 @@
 #include <thread>
 #include <chrono>
 #include <vector>
+#include <stdlib.h>
 
 //Globar Variables
   //Global Timer
   clock_t t;
-  std::vector<std::string*> transactions;
-  std::ifstream fileArr[4];
 
+  //Number of Transactions Executed
+  int trans;
+
+  //Vector Containing Transaction from Processors
+  std::vector<std::string*> transactions;
+
+  //Returns program time skewed by factor of skew
   int getTime() {
     //Increase to get faster proccessing
     //Warning: Increases chance of out of order transactions
@@ -33,9 +35,16 @@
   //Proccessor Vars
   int lines;
   int valueIndex;
+  char state;
   bool is_finished;
   std::vector<std::string*> tTable;
   std::string filePath;
+
+  //Output Tracking Variables
+  int cacheTransfers[3];
+  int coherenceInvalidations[4];
+  int dirtyWBs;
+  int linesInState[4];
 
   //Proccessor Functions
   //Returns Number of Lines in a Given File
@@ -105,8 +114,9 @@
       file.close();
   }
 
+  //Output Copy of tTable
   void printTTable() {
-    for(int lcv = 0; lcv < lines; lcv++) {
+    for(int lcv = 0; lcv < tTable.size(); lcv++) {
       std::string* currentArr = tTable.at(lcv);
       for(int vals = 0; vals < 4; vals++) {
         std::cout <<currentArr[vals] <<" , ";
@@ -116,14 +126,13 @@
   }
 
   //Updates Proccessor State
-  bool updateState(int rowNum, char newState) {
+  bool updateState(char newState) {
     char validStates[5] = {'e', 'i', 's', 'o', 'm'};
-    std::string* row = tTable.at(rowNum);
 
     for(int lcv = 0; lcv < 5; lcv++) {
       //Valid State Change
       if(newState == validStates[lcv]) {
-        row[3] = newState;
+        state = newState;
         return(true);
       }
       else {
@@ -135,6 +144,7 @@
 
   //Proccessor Constructor
   Proccessor(std::string path) {
+    state = 'i';
     filePath = path;
     valueIndex = 0;
     is_finished = false;
@@ -147,19 +157,17 @@
 Proccessor pArr[4] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
 
 //Adds Data if timestamp < currentTime
-void startImport() {
-  std::cout<<"Starting Import \n";
-  while(1) {
+bool startImport() {
       if(!(pArr[0].is_finished && pArr[1].is_finished && pArr[2].is_finished && pArr[3].is_finished)) {
         for(int lcv = 0; lcv < 4; lcv++) {
           //Check if Record is ready to add
           if(pArr[lcv].valueIndex < pArr[lcv].lines && !pArr[lcv].is_finished) {
             std::string* currArr = pArr[lcv].tTable.at(pArr[lcv].valueIndex);
             if(std::stoi(currArr[0]) < getTime()) {
-              std::cout<<"----------------------------------Adding Line---------------------------------\n";
-              std::cout <<"tTIme: " <<currArr[0] <<" and Compared Time " <<getTime() <<std::endl;
-              std::cout<<"Starting at index: " <<pArr[lcv].valueIndex <<" and with P"<<lcv <<'\n';
-              std::cout<<"----------------------------------Line Added----------------------------------\n\n";
+              // std::cout<<"----------------------------------Adding Line---------------------------------\n";
+              // std::cout <<"tTIme: " <<currArr[0] <<" and Compared Time " <<getTime() <<std::endl;
+              // std::cout<<"Starting at index: " <<pArr[lcv].valueIndex <<" and with P"<<lcv <<'\n';
+              // std::cout<<"----------------------------------Line Added----------------------------------\n\n";
               transactions.push_back(currArr);
               pArr[lcv].valueIndex++;
             }
@@ -171,31 +179,72 @@ void startImport() {
     }
     else {
       std::cout << "Import has finshed! \n";
-      break;
+      return(true);
     }
-  }
+    return(false);
 }
 
+void printOutput() {
+  char states[] = {'m','o','e','s','i'};
+  std::cout<<"----------------------------------------------------------------------------------\n";
+  //Output 1: Cache Transfers
+  std::cout << "The total number of cache-to-cache transfers for each processor pair \n";
+  for(int p = 0; p < 4; p++) {
+    std::cout <<"P" <<p <<" Cache Transfers: ";
+    for(int lcv = 0; lcv < 3; lcv++) {
+      std::cout <<states[lcv] <<" = " <<pArr[p].cacheTransfers[lcv] <<" ";
+    }
+    std::cout<<std::endl;
+  }
+  std::cout<<"----------------------------------------------------------------------------------\n";
+  //Output 2: Coherence Invalidations
+  std::cout << "The total number of invalidations due to coherence \n";
+  for(int p = 0; p < 4; p++) {
+    std::cout <<"P" <<p <<" Invalidation from: ";
+    for(int lcv = 0; lcv < 4; lcv++) {
+      std::cout <<states[lcv] <<" = " <<pArr[p].coherenceInvalidations[lcv] <<" ";
+    }
+    std::cout<<std::endl;
+  }
+  std::cout<<"----------------------------------------------------------------------------------\n";
+  //Output 3: Dirty Write Backs
+  std::cout << "The number of dirty writebacks from each processor.\n";
+  for(int p = 0; p < 4; p++) {
+    std::cout <<"P" <<p <<": " <<states[p] <<" = " <<pArr[p].dirtyWBs <<" ";
+  }
+  std::cout<<"\n----------------------------------------------------------------------------------\n";
+  //Output 4: Number of Lines in the Proccessor's States
+  std::cout << "The number of lines in each state at the end the simulation for each processor. \n";
+  for(int p = 0; p < 4; p++) {
+    std::cout <<"P" <<p <<" Invalidation from: ";
+    for(int lcv = 0; lcv < 5; lcv++) {
+      std::cout <<states[lcv] <<" = " <<pArr[p].linesInState[lcv] <<" ";
+    }
+    std::cout<<std::endl;
+  }
+  std::cout<<"----------------------------------------------------------------------------------\n";
+}
+
+//Cache Functions
 //busRead <physical memory address>
 bool busRd(Proccessor* processors, int activeProcessor, std::string value) {
   bool exclusive = true;
 
-  // for(int lcv = 0; lcv <= 3; lcv++) {
-  //   //Other Cache has Data
-  //   if(processors[activeProcessor].startImport == processors[lcv] && activeProcessor != lcv) {
-  //     exclusive = false;
-  //   }
-  // }
-  //Only Copy of Data
-  // if(exclusive) {
-  //   //Update Active Proccessor to Exclusive State
-  //   processors[activeProcessor].updateState(processors[activeProcessor].valueIndex, 'e');
-  //   return(true);
-  // }
-  // return(false);
+  for(int lcv = 0; lcv < 4; lcv++) {
+    //Other Cache has Data
+    // if(processors[activeProcessor]. == processors[lcv] && activeProcessor != lcv) {
+    //   exclusive = false;
+    // }
+  }
+  // Only Copy of Data
+  if(exclusive) {
+    //Update Active Proccessor to Exclusive State
+    processors[activeProcessor].updateState('e');
+    return(true);
+  }
+  return(false);
 }
 
-//Cache Functions
 //busReadX <physical memory address>
 bool busRdX(Proccessor* processors, int activeProcessor, std::string value) {
   return(1);
@@ -221,10 +270,22 @@ bool flush(Proccessor* processors, int activeProcessor, std::string value) {
   return(1);
 }
 
+//Pulls from Transaction Vector to Start Prcessing Transactions
+void processTransaction() {
+  if(!transactions.empty()) {
+    std::string* t = transactions.front();
+    transactions.erase(transactions.begin());
+    trans++;
+  }
+}
+
 //Start the program
 int main(int argc, char* argv[]) {
   //Start Clock
   t = clock();
+
+  //Becomes True after Import Completed
+  bool i_finished = false;
 
   //Test Print To Insure Initilization is Correct
   for(int lcv = 0; lcv < 4; lcv++) {
@@ -232,11 +293,21 @@ int main(int argc, char* argv[]) {
   }
 
   //Start Processing Transactions
-  startImport();
+  while(!i_finished) {
+    if(getTime() % 100) {
+      std::cout<<">| Time Elapsed: " <<getTime()/1000 <<" | Trasactions Processed: " <<trans <<std::endl;
+      std::cout <<std::endl << std::string( 20, '-' );
+    }
+    i_finished = startImport();
+    processTransaction();
+  }
+
+  //Print Results of Program
+  printOutput();
 
   //Final Run Time
   double finalTime = getTime();
-    std::cout <<"Time = " <<finalTime <<std::endl;
+    std::cout <<"Time = " <<finalTime <<" Seconds.\n";
 
   return 0;
 }
