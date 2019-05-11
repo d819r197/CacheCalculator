@@ -20,9 +20,13 @@
   std::ifstream fileArr[4];
 
   int getTime() {
+    //Increase to get faster proccessing
+    //Warning: Increases chance of out of order transactions
+    int skew = 1000;
+
     t = clock();
     float seconds = (((float)t)/CLOCKS_PER_SEC);
-    return(seconds * 1250);
+    return(seconds * 1000);
   }
 
   struct Proccessor {
@@ -112,20 +116,22 @@
   }
 
   //Updates Proccessor State
-  // bool updateState(int row, char newState) {
-  //   char validStates[5] = {'e', 'i', 's', 'o', 'm'};
-  //   for(int lcv = 0; lcv < 5; lcv++) {
-  //     //Valid State Change
-  //     if(newState == validStates[lcv]) {
-  //       importTable[row][4] = newState;
-  //       return(true);
-  //     }
-  //     else {
-  //       std::cout<<"Can't update processor state with passed input.\n";
-  //     }
-  //   }
-  //   return(false);
-  // }
+  bool updateState(int rowNum, char newState) {
+    char validStates[5] = {'e', 'i', 's', 'o', 'm'};
+    std::string* row = tTable.at(rowNum);
+
+    for(int lcv = 0; lcv < 5; lcv++) {
+      //Valid State Change
+      if(newState == validStates[lcv]) {
+        row[3] = newState;
+        return(true);
+      }
+      else {
+        std::cout<<"Can't update processor state with passed input.\n";
+      }
+    }
+    return(false);
+  }
 
   //Proccessor Constructor
   Proccessor(std::string path) {
@@ -137,8 +143,8 @@
   }
 };
 
-  //Create Proccessor Objs
-  Proccessor pArr[4] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
+//Create Proccessor Objs
+Proccessor pArr[4] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
 
 //Adds Data if timestamp < currentTime
 void startImport() {
@@ -227,6 +233,10 @@ int main(int argc, char* argv[]) {
 
   //Start Processing Transactions
   startImport();
+
+  //Final Run Time
+  double finalTime = getTime();
+    std::cout <<"Time = " <<finalTime <<std::endl;
 
   return 0;
 }
