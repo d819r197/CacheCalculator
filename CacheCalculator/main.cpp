@@ -63,7 +63,7 @@ struct Proccessor {
 
           //Break Lines into Words
           while(getline(ssLine, word, ' ')) {
-            // std::cout<<word <<" (" <<rows <<',' <<cols <<") | ";
+            std::cout<<word <<" (" <<rows <<',' <<cols <<") | ";
 
             //Slow Down Proccess to Avoid Error: Incorrect checksum for freed object
             std::this_thread::sleep_for (std::chrono::nanoseconds(250));
@@ -75,7 +75,7 @@ struct Proccessor {
             //Initilize State
             importTable[rows][cols] = "i";
           }
-          // std::cout<<"\n------------------------------------------------\n";
+          std::cout<<"\n------------------------------------------------\n";
           rows++;
         }
       return (importTable);
@@ -179,16 +179,17 @@ int main(int argc, char* argv[])
   //Create Proccessor Objs
   //Initilizes number of Lines, tagTable, and the filePath
   Proccessor pArr[4] = {Proccessor("p0.tr"), Proccessor("p1.tr"), Proccessor("p2.tr"), Proccessor("p3.tr")};
+    std::cout<<"SIZE: " <<sizeof(pArr) <<'\n';
 
   //Move Cache Transaction from importTable to tTable
   for(int lcv = 0; lcv < 4; lcv++) {
     std::cout <<"Times: " <<pArr[lcv].importTable[pArr[lcv].valueIndex][0] <<std::endl;
     //Proccesor Job Triggered
-    if(std::stof(pArr[lcv].importTable[pArr[lcv].valueIndex][0]) > t) {
-      std::cout<<"adding job, current index: " <<pArr[lcv].valueIndex <<std::endl;
-      pArr[lcv].tTable[pArr[lcv].valueIndex] = pArr[lcv].importTable[pArr[lcv].valueIndex];
-      pArr[lcv].valueIndex++;
-    }
+    // if(std::stof(pArr[lcv].importTable[pArr[lcv].valueIndex][0]) > t) {
+    //   std::cout<<"adding job, current index: " <<pArr[lcv].valueIndex <<std::endl;
+    //   pArr[lcv].tTable[pArr[lcv].valueIndex] = pArr[lcv].importTable[pArr[lcv].valueIndex];
+    //   pArr[lcv].valueIndex++;
+    // }
   }
 
   return 0;
