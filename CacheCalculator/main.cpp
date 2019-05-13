@@ -140,7 +140,7 @@
   int findTag(std::string t) {
     int pos = 0;
     for(int lcv = 0; lcv < transTable.size(); lcv++) {
-      std::cout<<"Comparing " <<transTable.at(lcv)[2].substr(0, 8) <<" to " <<t <<std::endl;
+      // std::cout<<"Comparing " <<transTable.at(lcv)[2].substr(0, 8) <<" to " <<t <<std::endl;
       if(transTable.at(lcv)[2].substr(0, 7) == t) {
         std::cout<<"Found";
         return(pos);
