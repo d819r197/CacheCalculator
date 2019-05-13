@@ -9,6 +9,7 @@
 #include <chrono>
 #include <vector>
 #include <stdlib.h>
+#include <algorithm>
 
 //Globar Variables
   //Global Timer
@@ -28,7 +29,7 @@
 
     t = clock();
     float seconds = (((float)t)/CLOCKS_PER_SEC);
-    return(seconds * 1000);
+    return(seconds * skew);
   }
 
   struct Proccessor {
@@ -38,13 +39,14 @@
   char state;
   bool is_finished;
   std::vector<std::string*> tTable;
+  std::vector<std::string*> transTable;
   std::string filePath;
 
   //Output Tracking Variables
   int cacheTransfers[3];
   int coherenceInvalidations[4];
   int dirtyWBs;
-  int linesInState[4];
+  int linesInState[5];
 
   //Proccessor Functions
   //Returns Number of Lines in a Given File
@@ -80,7 +82,7 @@
     if (file.is_open()) {
         //Break File into Lines
         while(getline(file, line)) {
-          std::string* importRow = new (std::nothrow) std::string[4];
+          std::string* importRow = new (std::nothrow) std::string[8];
           int cols = 0;
 
           //Remove Endline char
@@ -97,8 +99,17 @@
             importRow[cols] = word;
               cols++;
           }
-          //Initilize State
-          importRow[3] = "i";
+
+          //Assign Transaction Processor Num
+          importRow[3] = filePath;
+
+
+          //initlize tag with states attached
+          importRow[4] = "i";
+          importRow[5] = "i";
+          importRow[6] = "i";
+          importRow[7] = "i";
+
 
           //Show Row Output
           //std::cout<<"| Row: " <<importRow[0] <<" | " <<importRow[1] <<" | " <<importRow[2] <<" | " <<importRow[3] <<" | \n";
@@ -118,33 +129,56 @@
   void printTTable() {
     for(int lcv = 0; lcv < tTable.size(); lcv++) {
       std::string* currentArr = tTable.at(lcv);
-      for(int vals = 0; vals < 4; vals++) {
+      for(int vals = 0; vals < 3; vals++) {
         std::cout <<currentArr[vals] <<" , ";
       }
       std::cout <<"\n----------------------------\n";
     }
   }
 
+  //Return Position of Tag in Proccessor's Tag Array
+  int findTag(std::string t) {
+    int pos = 0;
+    for(int lcv = 0; lcv < transTable.size(); lcv++) {
+      std::cout<<"Comparing " <<transTable.at(lcv)[2].substr(0, 8) <<" to " <<t <<std::endl;
+      if(transTable.at(lcv)[2].substr(0, 7) == t) {
+        std::cout<<"Found";
+        return(pos);
+      }
+      else{
+        pos++;
+      }
+    }
+    return(-1);
+  }
+
   //Updates Proccessor State
-  bool updateState(char newState) {
-    char validStates[5] = {'e', 'i', 's', 'o', 'm'};
+  bool updateState(std::string tag, int pNum, std::string newState) {
+    std::string validStates[5] = {"m", "o", "e", "s", "i"};
 
     for(int lcv = 0; lcv < 5; lcv++) {
       //Valid State Change
       if(newState == validStates[lcv]) {
-        state = newState;
-        return(true);
-      }
-      else {
-        std::cout<<"Can't update processor state with passed input.\n";
+        int pos = findTag(tag);
+        if(pos != -1) {
+          transTable.at(pos)[2+pNum] = newState;
+
+          //Increment State for Processor
+          linesInState[lcv]++;
+          std::cout<<"State: " <<validStates[lcv] <<'=' <<linesInState[lcv] <<" incremented.\n";
+          return(true);
+        }
+        else {
+          // std::cout<<"Tag Not Found!\n";
+          // std::cout<<"Tag " <<tag <<"processor: " <<pNum <<" State: " <<newState <<". \n";
+        }
       }
     }
-    return(false);
+  return(false);
   }
 
   //Proccessor Constructor
   Proccessor(std::string path) {
-    state = 'i';
     filePath = path;
     valueIndex = 0;
     is_finished = false;
@@ -185,7 +219,8 @@ bool startImport() {
 }
 
 void printOutput() {
-  char states[] = {'m','o','e','s','i'};
+  std::string states[] = {"m", "o", "e", "s", "i"};
+
   std::cout<<"----------------------------------------------------------------------------------\n";
   //Output 1: Cache Transfers
   std::cout << "The total number of cache-to-cache transfers for each processor pair \n";
@@ -225,81 +260,189 @@ void printOutput() {
   std::cout<<"----------------------------------------------------------------------------------\n";
 }
 
-//Cache Functions
-//busRead <physical memory address>
-bool busRd(Proccessor* processors, int activeProcessor, std::string value) {
+//busReadX <physical memory address>
+//Update everything to invalid state
+bool busUpgr(std::string tag) {
+  for(int lcv = 0; lcv < 4; lcv++) {
+    int tagPos = pArr[lcv].findTag(tag);
+    if(tagPos != -1) {
+      pArr[lcv].updateState(tag, lcv, "i");
+    }
+  }
+  return false;
+}
+
+//Read Transactions
+bool read(int pNum, std::string pAddress) {
   bool exclusive = true;
 
+  //Parse physical address
+  //0x Plus 5Bits + index
+  std::string tag = pAddress.substr(0, 8);
+
+  //2 Bits
+  std::string offset = pAddress.substr(9, 10);
+    //std::cout <<"Tag: " <<tag <<" | index: " <<index <<" | offset: " <<offset <<std::endl;
+
+  //BusRd
   for(int lcv = 0; lcv < 4; lcv++) {
     //Other Cache has Data
-    // if(processors[activeProcessor]. == processors[lcv] && activeProcessor != lcv) {
-    //   exclusive = false;
-    // }
+    int tagPos = pArr[lcv].findTag(tag);
+    if(tagPos != -1 && pNum != lcv) {
+      std::string* currTrans = pArr[lcv].transTable.at(tagPos);
+      //Other Cache in Modified State
+      if(currTrans[lcv] == "m") {
+        pArr[pNum].updateState(tag, pNum, "s");
+        pArr[pNum].updateState(tag, lcv, "o");
+      }
+      //Other Cache in Sharred State
+      else {
+        pArr[pNum].updateState(tag, pNum, "s");
+        pArr[pNum].updateState(tag, lcv, "s");
+      }
+      exclusive = false;
+    }
   }
   // Only Copy of Data
   if(exclusive) {
     //Update Active Proccessor to Exclusive State
-    processors[activeProcessor].updateState('e');
+    pArr[pNum].updateState(tag, pNum, "e");
     return(true);
   }
   return(false);
 }
 
-//busReadX <physical memory address>
-bool busRdX(Proccessor* processors, int activeProcessor, std::string value) {
-  return(1);
-}
+//Write Transactions
+bool write(int pNum, std::string pAddress) {
+  //Parse physical address
+  //0x Plus 5Bits + index
+  std::string tag = pAddress.substr(0, 8);
 
-//ProccessorRead <physical memory address>
-bool prRd(Proccessor* processors, int activeProcessor, std::string value) {
-  return(1);
-}
+  //2 Bits
+  std::string offset = pAddress.substr(9, 10);
+    //std::cout <<"Tag: " <<tag <<" | index: " <<index <<" | offset: " <<offset <<std::endl;
 
-//ProccessorWrite <physical memory address>
-bool prWr(Proccessor* processors, int activeProcessor, std::string value) {
-  return(1);
-}
+  //Change to Modified State
+  for(int lcv = 0; lcv < 4; lcv++) {
+    //Call BusUpgr to Invalidate States
+    busUpgr(tag);
 
-//busUpgrade <physical memory address>
-bool busUpgr(Proccessor* processors, int activeProcessor, std::string value) {
-  return(1);
-}
+    //Change State to Modified
+    pArr[pNum].updateState(tag, pNum, "m");
+  }
 
-//Flush
-bool flush(Proccessor* processors, int activeProcessor, std::string value) {
-  return(1);
+
 }
 
 //Pulls from Transaction Vector to Start Prcessing Transactions
-void processTransaction() {
+bool pushTransaction() {
   if(!transactions.empty()) {
-    std::string* t = transactions.front();
+    //Get First Transaction of Vector
+    //Arr = timestamp | read/write | memory address | filePath | P0 State | P1 State | P2 State | P3 State
+    std::string* tag = transactions.front();
+
+      //Push Finished Transaction to transTable
+      if(tag[3] == "p0.tr") {
+        //Read Action
+        if(tag[1] == "0") {
+          read(0, tag[2]);
+        }
+        //Write Action
+        else if(tag[1] == "1") {
+          write(0, tag[2]);
+        }
+        else {
+          std::cout <<"Error: transaction doesn't have a read or write attribute\n";
+        }
+        pArr[0].transTable.push_back(tag);
+      }
+      else if(tag[3] == "p1.tr") {
+        //Read Action
+        if(tag[1] == "0") {
+          read(0, tag[2]);
+        }
+        //Write Action
+        else if(tag[1] == "1") {
+          write(0, tag[2]);
+        }
+        else {
+          std::cout <<"Error: transaction doesn't have a read or write attribute\n";
+        }
+        pArr[1].transTable.push_back(tag);
+      }
+      else if(tag[3] == "p2.tr") {
+        //Read Action
+        if(tag[1] == "0") {
+          read(0, tag[2]);
+        }
+        //Write Action
+        else if(tag[1] == "1") {
+          write(0, tag[2]);
+        }
+        else {
+          std::cout <<"Error: transaction doesn't have a read or write attribute\n";
+        }
+        pArr[2].transTable.push_back(tag);
+      }
+      else if(tag[3] == "p3.tr") {
+        //Read Action
+        if(tag[1] == "0") {
+          read(0, tag[2]);
+        }
+        //Write Action
+        else if(tag[1] == "1") {
+          write(0, tag[2]);
+        }
+        else {
+          std::cout <<"Error: transaction doesn't have a read or write attribute\n";
+        }
+        pArr[3].transTable.push_back(tag);
+      }
+      else {
+        // std::cout << "Can not add transaction to trans table, because no proccessor: " <<pArr[0].filePath <<pArr[1].filePath <<pArr[2].filePath <<pArr[3].filePath <<"was found to write to.\n";
+      }
+
+    //Update Transactions by Removing First Element
     transactions.erase(transactions.begin());
+
+    //Update Number of Transactions Proccessed
     trans++;
+    return false;
   }
+  return true;
 }
 
 //Start the program
 int main(int argc, char* argv[]) {
-  //Start Clock
-  t = clock();
-
-  //Becomes True after Import Completed
+  //Becomes True after action Completed
   bool i_finished = false;
+  bool p_finished = false;
+
 
   //Test Print To Insure Initilization is Correct
-  for(int lcv = 0; lcv < 4; lcv++) {
-    //pArr[lcv].printTTable();
-  }
+  // for(int lcv = 0; lcv < 4; lcv++) {
+  //   //pArr[lcv].printTTable();
+  // }
 
-  //Start Processing Transactions
+  //Start Importing Transactions
   while(!i_finished) {
-    if(getTime() % 100) {
+    if(getTime() % 1000 == 0) {
       std::cout<<">| Time Elapsed: " <<getTime()/1000 <<" | Trasactions Processed: " <<trans <<std::endl;
       std::cout <<std::endl << std::string( 20, '-' );
     }
-    i_finished = startImport();
-    processTransaction();
+    i_finished =  startImport();
+  }
+
+  //Start Clock
+  t = clock();
+
+  //Start Proccessing Transactions
+  while(!p_finished) {
+    if(getTime() % 1000 == 0) {
+      std::cout<<">| Time Elapsed: " <<getTime()/1000 <<" | Trasactions Processed: " <<trans <<std::endl;
+      std::cout <<std::endl << std::string( 20, '-' );
+    }
+    p_finished = pushTransaction();
   }
 
   //Print Results of Program
@@ -307,7 +450,7 @@ int main(int argc, char* argv[]) {
 
   //Final Run Time
   double finalTime = getTime();
-    std::cout <<"Time = " <<finalTime <<" Seconds.\n";
+    std::cout <<"Time = " <<finalTime/1000 <<" Seconds.\n";
 
   return 0;
 }
